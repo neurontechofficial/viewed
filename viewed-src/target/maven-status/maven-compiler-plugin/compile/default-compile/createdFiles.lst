@@ -1,6 +1,8 @@
 Main.class
+AlbumArtLoader$MediaInfo.class
 StatsOverlay.class
 AlbumArtPanel.class
+PlaylistManager.class
 About.class
 VisualizerPanel.class
 AlbumArtLoader.class

@@ -434,16 +434,17 @@ public class PlayerUI {
 
         if (mediaPlayer != null) {
             // Restore playback state
-            mediaPlayer.seek(currentTime);
-            if (wasPlaying) {
-                // Short delay to ensure seek works before playing
-                final boolean finalWasPlaying = wasPlaying;
-                Platform.runLater(() -> {
-                    if (mediaPlayer != null && finalWasPlaying) {
+            Duration finalCurrentTime = currentTime;
+            boolean finalWasPlaying = wasPlaying;
+
+            Platform.runLater(() -> {
+                if (mediaPlayer != null) {
+                    mediaPlayer.seek(finalCurrentTime);
+                    if (finalWasPlaying) {
                         mediaPlayer.play();
                     }
-                });
-            }
+                }
+            });
         }
     }
 

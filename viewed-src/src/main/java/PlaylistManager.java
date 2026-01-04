@@ -13,8 +13,8 @@ public class PlaylistManager {
     public static List<String> parsePlaylist(String playlistUrl) {
         List<String> tracks = new ArrayList<>();
         try {
-            @SuppressWarnings("deprecation") // URL constructor is deprecated in 20, but compatible with 17
-            URL url = new URL(playlistUrl);
+            // URI.create is safer and replaces deprecated new URL(string)
+            URL url = java.net.URI.create(playlistUrl).toURL();
             try (InputStream is = url.openStream()) {
                 return parsePlaylist(is);
             }
