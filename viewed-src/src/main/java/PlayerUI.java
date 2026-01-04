@@ -14,8 +14,12 @@ import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.prefs.Preferences;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PlayerUI {
+
+    private static final Logger logger = LoggerFactory.getLogger(PlayerUI.class);
 
     private MediaPlayer mediaPlayer;
     private MediaView mediaView;
@@ -118,6 +122,7 @@ public class PlayerUI {
                 mediaPlayer.stop();
                 mediaPlayer.dispose();
             }
+            logger.info("Player reloaded manually.");
             JOptionPane.showMessageDialog(frame, "Player reloaded!");
         });
 
@@ -125,11 +130,13 @@ public class PlayerUI {
         nothingItem.addActionListener(e -> JOptionPane.showMessageDialog(frame, "Help not available yet."));
 
         playBtn.addActionListener(e -> Platform.runLater(() -> {
-            if (mediaPlayer != null) mediaPlayer.play();
+            if (mediaPlayer != null)
+                mediaPlayer.play();
         }));
 
         pauseBtn.addActionListener(e -> Platform.runLater(() -> {
-            if (mediaPlayer != null) mediaPlayer.pause();
+            if (mediaPlayer != null)
+                mediaPlayer.pause();
         }));
 
         volumeSlider.addChangeListener((ChangeEvent e) -> {
@@ -139,7 +146,8 @@ public class PlayerUI {
         });
 
         seekBar.addChangeListener((ChangeEvent e) -> {
-            if (mediaPlayer == null) return;
+            if (mediaPlayer == null)
+                return;
             if (seekBar.getValueIsAdjusting()) {
                 isSeeking = true;
                 double percent = seekBar.getValue() / 100.0;
@@ -164,10 +172,12 @@ public class PlayerUI {
                 "Audio/Video Files", "mp4", "m4v", "mp3", "wav", "aac", "aiff"));
 
         int result = chooser.showOpenDialog(frame);
-        if (result != JFileChooser.APPROVE_OPTION) return;
+        if (result != JFileChooser.APPROVE_OPTION)
+            return;
 
         File file = chooser.getSelectedFile();
-        if (file == null) return;
+        if (file == null)
+            return;
 
         String path = file.getAbsolutePath().toLowerCase();
         if (path.endsWith(".mp4") || path.endsWith(".m4v")) {
@@ -180,7 +190,8 @@ public class PlayerUI {
     }
 
     private void openMediaFile(File file) {
-        if (file == null) return;
+        if (file == null)
+            return;
 
         Platform.runLater(() -> {
             try {
@@ -214,14 +225,18 @@ public class PlayerUI {
                 addRecentFile(file.getAbsolutePath());
                 setupTimeListener();
 
+                logger.info("Opened video file: {}", file.getName());
+
             } catch (Exception e) {
+                logger.error("Could not open video file", e);
                 JOptionPane.showMessageDialog(frame, "Could not open file:\n" + file.getName() + "\n" + e.getMessage());
             }
         });
     }
 
     private void openAudio(File file) {
-        if (file == null) return;
+        if (file == null)
+            return;
 
         Platform.runLater(() -> {
             try {
@@ -240,15 +255,19 @@ public class PlayerUI {
 
                 addRecentFile(file.getAbsolutePath());
                 setupTimeListener();
+                logger.info("Opened audio file: {}", file.getName());
 
             } catch (Exception e) {
-                JOptionPane.showMessageDialog(frame, "Could not open audio:\n" + file.getName() + "\n" + e.getMessage());
+                logger.error("Could not open audio file", e);
+                JOptionPane.showMessageDialog(frame,
+                        "Could not open audio:\n" + file.getName() + "\n" + e.getMessage());
             }
         });
     }
 
     private void setupTimeListener() {
-        if (mediaPlayer == null) return;
+        if (mediaPlayer == null)
+            return;
 
         mediaPlayer.currentTimeProperty().addListener((obs, oldTime, newTime) -> {
             Platform.runLater(() -> {
@@ -266,6 +285,16 @@ public class PlayerUI {
 
     private void toggleFullscreen() {
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+        boolean wasPlaying = false;
+        Duration currentTime = Duration.ZERO;
+
+        if (mediaPlayer != null) {
+            if (mediaPlayer.getStatus() == MediaPlayer.Status.PLAYING) {
+                wasPlaying = true;
+                mediaPlayer.pause();
+            }
+            currentTime = mediaPlayer.getCurrentTime();
+        }
 
         if (!isFullscreen) {
             previousBounds = frame.getBounds();
@@ -274,6 +303,7 @@ public class PlayerUI {
             frame.setVisible(true);
             gd.setFullScreenWindow(frame);
             isFullscreen = true;
+            logger.info("Switched to fullscreen");
         } else {
             gd.setFullScreenWindow(null);
             frame.dispose();
@@ -281,6 +311,21 @@ public class PlayerUI {
             frame.setBounds(previousBounds);
             frame.setVisible(true);
             isFullscreen = false;
+            logger.info("Exited fullscreen");
+        }
+
+        if (mediaPlayer != null) {
+            // Restore playback state
+            mediaPlayer.seek(currentTime);
+            if (wasPlaying) {
+                // Short delay to ensure seek works before playing
+                final boolean finalWasPlaying = wasPlaying;
+                Platform.runLater(() -> {
+                    if (mediaPlayer != null && finalWasPlaying) {
+                        mediaPlayer.play();
+                    }
+                });
+            }
         }
     }
 
@@ -288,7 +333,8 @@ public class PlayerUI {
         recentFiles.clear();
         for (int i = 0; i <= MAX_RECENT_FILES; i++) {
             String path = prefs.get("recentFile" + i, null);
-            if (path != null) recentFiles.add(path);
+            if (path != null)
+                recentFiles.add(path);
         }
         refreshRecentFilesMenu();
     }
@@ -296,10 +342,12 @@ public class PlayerUI {
     private void addRecentFile(String path) {
         recentFiles.removeIf(obj -> obj instanceof String && obj.equals(path));
         recentFiles.add(0, path);
-        while (recentFiles.size() > MAX_RECENT_FILES) recentFiles.remove(recentFiles.size() - 1);
+        while (recentFiles.size() > MAX_RECENT_FILES)
+            recentFiles.remove(recentFiles.size() - 1);
         for (int i = 0; i < recentFiles.size(); i++) {
             Object obj = recentFiles.get(i);
-            if (obj instanceof String s) prefs.put("recentFile" + i, s);
+            if (obj instanceof String s)
+                prefs.put("recentFile" + i, s);
         }
         refreshRecentFilesMenu();
     }
@@ -312,8 +360,10 @@ public class PlayerUI {
                 JMenuItem item = new JMenuItem(path);
                 item.addActionListener(e -> {
                     File file = new File(path);
-                    if (path.endsWith(".mp4") || path.endsWith(".m4v")) openMediaFile(file);
-                    else openAudio(file);
+                    if (path.endsWith(".mp4") || path.endsWith(".m4v"))
+                        openMediaFile(file);
+                    else
+                        openAudio(file);
                 });
                 recentFilesMenu.add(item);
                 hasFiles = true;
@@ -327,7 +377,8 @@ public class PlayerUI {
     }
 
     private String formatTime(Duration duration) {
-        if (duration == null || duration.isUnknown()) return "00:00";
+        if (duration == null || duration.isUnknown())
+            return "00:00";
         int totalSeconds = (int) Math.floor(duration.toSeconds());
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
