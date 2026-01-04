@@ -1,41 +1,66 @@
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
 
 public class AlbumArtPanel extends JPanel {
 
-    private BufferedImage albumArt;
+    private final JLabel artLabel;
+    private final JLabel titleLabel;
+    private final JLabel detailsLabel;
 
-    public AlbumArtPanel(File mp3File) {
-        setPreferredSize(new Dimension(400, 400));
-        loadAlbumArt(mp3File);
+    public AlbumArtPanel() {
+        setLayout(new BorderLayout());
+        setBackground(Color.DARK_GRAY);
+
+        // Art Center
+        artLabel = new JLabel();
+        artLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        artLabel.setVerticalAlignment(SwingConstants.CENTER);
+        add(artLabel, BorderLayout.CENTER);
+
+        // Metadata Bottom
+        JPanel metaPanel = new JPanel();
+        metaPanel.setLayout(new BoxLayout(metaPanel, BoxLayout.Y_AXIS));
+        metaPanel.setBackground(Color.BLACK);
+        metaPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        titleLabel = new JLabel(" ");
+        titleLabel.setForeground(Color.WHITE);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        detailsLabel = new JLabel(" ");
+        detailsLabel.setForeground(Color.LIGHT_GRAY);
+        detailsLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        detailsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        metaPanel.add(titleLabel);
+        metaPanel.add(Box.createVerticalStrut(5));
+        metaPanel.add(detailsLabel);
+
+        add(metaPanel, BorderLayout.SOUTH);
     }
 
-    private void loadAlbumArt(File mp3File) {
-        try {
-            // Use Jaudiotagger or a placeholder image if none
-            // For now, we'll just try to load a JPEG/PNG with same name
-            File imgFile = new File(mp3File.getParentFile(), mp3File.getName().replaceAll("\\.mp3$", ".jpg"));
-            if (!imgFile.exists()) imgFile = new File(mp3File.getParentFile(), mp3File.getName().replaceAll("\\.mp3$", ".png"));
-            if (imgFile.exists()) albumArt = ImageIO.read(imgFile);
-        } catch (Exception e) {
-            System.out.println("No album art found for " + mp3File.getName());
+    public void setMediaInfo(AlbumArtLoader.MediaInfo info) {
+        if (info == null) {
+            artLabel.setIcon(null);
+            artLabel.setText("No Media Info");
+            titleLabel.setText(" ");
+            detailsLabel.setText(" ");
+            return;
         }
-    }
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        if (albumArt != null) {
-            int w = getWidth();
-            int h = getHeight();
-            g.drawImage(albumArt, 0, 0, w, h, this);
+        if (info.artwork != null) {
+            artLabel.setIcon(info.artwork);
+            artLabel.setText("");
         } else {
-            // Placeholder gray background
-            g.setColor(Color.DARK_GRAY);
-            g.fillRect(0, 0, getWidth(), getHeight());
+            artLabel.setIcon(null);
+            artLabel.setText("No Artwork");
+            artLabel.setForeground(Color.GRAY);
         }
+
+        titleLabel.setText(info.title != null && !info.title.isEmpty() ? info.title : "Unknown Title");
+        String artist = info.artist != null && !info.artist.isEmpty() ? info.artist : "Unknown Artist";
+        String album = info.album != null && !info.album.isEmpty() ? info.album : "Unknown Album";
+        detailsLabel.setText(artist + " - " + album);
     }
 }

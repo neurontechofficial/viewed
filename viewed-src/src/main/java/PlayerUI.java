@@ -13,6 +13,8 @@ import java.awt.*;
 import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.prefs.Preferences;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +26,13 @@ public class PlayerUI {
     private MediaPlayer mediaPlayer;
     private MediaView mediaView;
     private JFrame frame;
+    private JPanel mainContentPanel;
+    private CardLayout cardLayout;
     private JFXPanel jfxPanel;
+    private AlbumArtPanel albumArtPanel;
+
+    private List<String> currentPlaylist = new ArrayList<>();
+    private int currentPlaylistIndex = -1;
 
     private boolean isSeeking = false;
     private static final int MAX_RECENT_FILES = 5;
@@ -49,8 +57,10 @@ public class PlayerUI {
 
         JMenu fileMenu = new JMenu("File");
         JMenuItem openItem = new JMenuItem("Open Audio/Video file...");
+        JMenuItem openPlaylistItem = new JMenuItem("Open Playlist URL...");
         JMenuItem exitItem = new JMenuItem("Exit");
         fileMenu.add(openItem);
+        fileMenu.add(openPlaylistItem);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
         fileMenu.add(recentFilesMenu);
@@ -76,8 +86,18 @@ public class PlayerUI {
         frame.setJMenuBar(menuBar);
 
         // --- Player area ---
+        // --- Player area ---
+        mainContentPanel = new JPanel();
+        cardLayout = new CardLayout();
+        mainContentPanel.setLayout(cardLayout);
+
         jfxPanel = new JFXPanel();
-        frame.add(jfxPanel, BorderLayout.CENTER);
+        albumArtPanel = new AlbumArtPanel();
+
+        mainContentPanel.add(jfxPanel, "VIDEO");
+        mainContentPanel.add(albumArtPanel, "AUDIO");
+
+        frame.add(mainContentPanel, BorderLayout.CENTER);
 
         // Label for audio/no video
         fileLabel = new JLabel("No media loaded :(");
@@ -113,7 +133,9 @@ public class PlayerUI {
         frame.setVisible(true);
 
         // --- Action handlers ---
+        // --- Action handlers ---
         openItem.addActionListener(e -> chooseFile());
+        openPlaylistItem.addActionListener(e -> askForPlaylistUrl());
         exitItem.addActionListener(e -> System.exit(0));
         fullscreenItem.addActionListener(e -> toggleFullscreen());
 
@@ -165,6 +187,85 @@ public class PlayerUI {
         loadRecentFiles();
     }
 
+    private void askForPlaylistUrl() {
+        String url = JOptionPane.showInputDialog(frame, "Enter Playlist URL (M3U/PLS):");
+        if (url != null && !url.trim().isEmpty()) {
+            new Thread(() -> {
+                List<String> tracks = PlaylistManager.parsePlaylist(url.trim());
+                if (!tracks.isEmpty()) {
+                    SwingUtilities.invokeLater(() -> {
+                        currentPlaylist = tracks;
+                        currentPlaylistIndex = 0;
+                        playPlaylistTrack();
+                    });
+                } else {
+                    SwingUtilities
+                            .invokeLater(() -> JOptionPane.showMessageDialog(frame, "No tracks found in playlist!"));
+                }
+            }).start();
+        }
+    }
+
+    private void playPlaylistTrack() {
+        if (currentPlaylist == null || currentPlaylist.isEmpty() ||
+                currentPlaylistIndex < 0 || currentPlaylistIndex >= currentPlaylist.size())
+            return;
+
+        String path = currentPlaylist.get(currentPlaylistIndex);
+        logger.info("Playing playlist track {}: {}", currentPlaylistIndex, path);
+
+        // Check if it's a local file or URL
+        if (path.startsWith("http") || path.startsWith("https")) {
+            playStream(path);
+        } else {
+            File f = new File(path);
+            if (f.exists()) {
+                if (path.toLowerCase().endsWith(".mp4"))
+                    openMediaFile(f);
+                else
+                    openAudio(f);
+            }
+        }
+    }
+
+    private void playStream(String url) {
+        Platform.runLater(() -> {
+            try {
+                if (mediaPlayer != null) {
+                    mediaPlayer.stop();
+                    mediaPlayer.dispose();
+                }
+
+                Media media = new Media(url);
+                mediaPlayer = new MediaPlayer(media);
+                mediaPlayer.play();
+
+                // Show metadata logic for streams
+                albumArtPanel.setMediaInfo(new AlbumArtLoader.MediaInfo(null, "Loading...", "Stream", ""));
+                cardLayout.show(mainContentPanel, "AUDIO");
+
+                media.getMetadata().addListener((javafx.collections.MapChangeListener<String, Object>) change -> {
+                    if (change.wasAdded()) {
+                        updateStreamMetadata(media.getMetadata());
+                    }
+                });
+
+                fileLabel.setVisible(false);
+                setupTimeListener();
+            } catch (Exception e) {
+                logger.error("Error playing stream", e);
+            }
+        });
+    }
+
+    private void updateStreamMetadata(Map<String, Object> metadata) {
+        String title = (String) metadata.getOrDefault("title", "Unknown Title");
+        String artist = (String) metadata.getOrDefault("artist", "Unknown Artist");
+        String album = (String) metadata.getOrDefault("album", "");
+        SwingUtilities.invokeLater(
+                () -> albumArtPanel.setMediaInfo(new AlbumArtLoader.MediaInfo(null, title, artist, album)));
+    }
+
     private void chooseFile() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Select a media file");
@@ -205,6 +306,7 @@ public class PlayerUI {
                 mediaPlayer = new MediaPlayer(media);
 
                 // Update MediaView
+                cardLayout.show(mainContentPanel, "VIDEO");
                 if (mediaView == null) {
                     mediaView = new MediaView(mediaPlayer);
                 } else {
@@ -253,6 +355,11 @@ public class PlayerUI {
                 fileLabel.setText(file.getName());
                 fileLabel.setVisible(true);
 
+                // Load metadata
+                AlbumArtLoader.MediaInfo info = AlbumArtLoader.loadMediaInfo(file);
+                albumArtPanel.setMediaInfo(info);
+                cardLayout.show(mainContentPanel, "AUDIO");
+
                 addRecentFile(file.getAbsolutePath());
                 setupTimeListener();
                 logger.info("Opened audio file: {}", file.getName());
@@ -277,6 +384,17 @@ public class PlayerUI {
                     if (!isSeeking) {
                         double progress = newTime.toMillis() / total.toMillis() * 100;
                         seekBar.setValue((int) progress);
+                    }
+                }
+            });
+        });
+
+        mediaPlayer.setOnEndOfMedia(() -> {
+            Platform.runLater(() -> {
+                if (currentPlaylist != null && !currentPlaylist.isEmpty()) {
+                    currentPlaylistIndex++;
+                    if (currentPlaylistIndex < currentPlaylist.size()) {
+                        SwingUtilities.invokeLater(this::playPlaylistTrack);
                     }
                 }
             });
